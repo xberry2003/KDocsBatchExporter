@@ -1,0 +1,23 @@
+{
+  "name": "kdocs-batch-exporter",
+  "version": "0.1.0",
+  "description": "Modular KDocs 365 enterprise batch exporter",
+  "private": true,
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "kdocs-batch-exporter": "scripts/cli.js"
+  },
+  "scripts": {
+    "test": "node --test tests/unit/*.test.js",
+    "check": "node scripts/check-syntax.js",
+    "cli": "node scripts/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "commander": "^12.1.0"
+  }
+}

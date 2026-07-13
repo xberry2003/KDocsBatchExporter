@@ -4,11 +4,13 @@ const path = require('path');
 
 const ITEM_TYPE = Object.freeze({
   AIRPAGE_ONLINE_DOCUMENT: 'AIRPAGE_ONLINE_DOCUMENT',
+  DBT_SPECIAL_DOCUMENT: 'DBT_SPECIAL_DOCUMENT',
   PDF: 'PDF',
   PPT: 'PPT',
   PPTX: 'PPTX',
   XLS: 'XLS',
   XLSX: 'XLSX',
+  FORM: 'FORM',
   OTHER_FILE: 'OTHER_FILE',
   UNKNOWN: 'UNKNOWN',
 });
@@ -38,6 +40,8 @@ function detectFileType(item = {}) {
   const text = metadataText(item);
 
   if (isAirPageOnlineDocument(item)) return ITEM_TYPE.AIRPAGE_ONLINE_DOCUMENT;
+  if (ext === '.dbt') return ITEM_TYPE.DBT_SPECIAL_DOCUMENT;
+  if (ext === '.form' || /\bform\b|wpsform|kdocs.*form/.test(text)) return ITEM_TYPE.FORM;
   if (ext === '.pdf' || /\bpdf\b/.test(text)) return ITEM_TYPE.PDF;
   if (ext === '.pptx') return ITEM_TYPE.PPTX;
   if (ext === '.ppt') return ITEM_TYPE.PPT;
@@ -55,4 +59,3 @@ module.exports = {
   extensionOf,
   isAirPageOnlineDocument,
 };
-

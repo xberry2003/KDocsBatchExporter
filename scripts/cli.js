@@ -9,6 +9,7 @@ const { SessionStore } = require('../src/auth/session-store');
 const { KDocsApiClient } = require('../src/kdocs/api-client');
 const { parseKDocsUrl } = require('../src/kdocs/folder-identity');
 const { KDocsFolderScanner } = require('../src/kdocs/folder-scanner');
+const { runRetryFailed, runUnifiedExport } = require('../src/export/unified-exporter');
 
 const program = new Command();
 
@@ -97,7 +98,89 @@ program
     }, null, 2));
   });
 
-for (const command of ['export', 'retry-failed', 'status', 'inspect']) {
+program
+  .command('export')
+  .description('Scan and export a KDocs enterprise folder with mixed strategies')
+  .requiredOption('--url <url>', 'KDocs enterprise folder URL')
+  .requiredOption('--output <path>', 'output directory for exported files')
+  .option('--task-dir <path>', 'directory for task state files')
+  .option('--state-dir <path>', 'alias of --task-dir for task state files')
+  .option('--state-root <path>', 'base directory; task identity will be appended')
+  .option('--find-child-name <name>', 'resolve exactly one direct child folder before scanning')
+  .option('--scan-only', 'write task, scan, routing plan and audit without downloading')
+  .option('--continue-on-error', 'continue after per-file failures', true)
+  .option('--manual-ext <extension>', 'extension that requires manual handling', (value, previous) => previous.concat(value), [])
+  .option('--name <name>', 'human-readable directory name for reports/task state')
+  .option('--direct-concurrency <n>', 'direct download concurrency', (value) => Number(value), 2)
+  .option('--airpage-concurrency <n>', 'AirPage export concurrency', (value) => Number(value), 1)
+  .option('--direct-attempts <n>', 'direct download attempts', (value) => Number(value), 3)
+  .option('--airpage-attempts <n>', 'AirPage export attempts', (value) => Number(value), 2)
+  .option('--max-folders <n>', 'maximum folders to scan', (value) => Number(value), Number.MAX_SAFE_INTEGER)
+  .option('--traversal <mode>', 'stack or queue traversal', 'stack')
+  .option('--credential-path <path>')
+  .action(async (options) => {
+    const result = await runUnifiedExport({
+      url: options.url,
+      output: options.output,
+      taskDir: options.taskDir || options.stateDir,
+      stateRoot: options.stateRoot,
+      findChildName: options.findChildName,
+      scanOnly: Boolean(options.scanOnly),
+      continueOnError: Boolean(options.continueOnError),
+      manualExt: options.manualExt,
+      name: options.name,
+      directConcurrency: options.directConcurrency,
+      airpageConcurrency: options.airpageConcurrency,
+      directAttempts: options.directAttempts,
+      airpageAttempts: options.airpageAttempts,
+      maxFolders: options.maxFolders,
+      traversal: options.traversal,
+      credentialPath: options.credentialPath,
+    });
+    console.log(JSON.stringify({
+      ok: result.scanOnly ? true : result.supportedFailedCount === 0 && result.failedCount === 0,
+      taskIdentity: result.taskIdentity,
+      totalFileCount: result.totalFileCount,
+      successCount: result.successCount,
+      failedCount: result.failedCount,
+      skippedCount: result.skippedCount,
+      paths: result.paths,
+    }, null, 2));
+    if (!result.scanOnly && (result.supportedFailedCount !== 0 || result.failedCount !== 0)) process.exitCode = 1;
+  });
+
+program
+  .command('retry-failed')
+  .description('Retry automatically failed AirPage DOCX exports from an existing task directory')
+  .requiredOption('--task-dir <path>', 'task state directory containing failed-files.jsonl')
+  .option('--credential-path <path>')
+  .option('--airpage-concurrency <n>', 'AirPage export retry concurrency', (value) => Number(value), 1)
+  .option('--airpage-attempts <n>', 'AirPage export retry attempts', (value) => Number(value), 4)
+  .option('--airpage-retry-delay-ms <n>', 'delay between AirPage retry attempts', (value) => Number(value), 5000)
+  .action(async (options) => {
+    const result = await runRetryFailed({
+      taskDir: options.taskDir,
+      credentialPath: options.credentialPath,
+      airpageConcurrency: options.airpageConcurrency,
+      airpageAttempts: options.airpageAttempts,
+      airpageRetryDelayMs: options.airpageRetryDelayMs,
+    });
+    console.log(JSON.stringify({
+      ok: result.supportedFailedCount === 0,
+      taskIdentity: result.taskIdentity,
+      retriedCount: result.retriedCount,
+      retrySuccessCount: result.retrySuccessCount,
+      retryFailedCount: result.retryFailedCount,
+      successCount: result.successCount,
+      failedCount: result.failedCount,
+      manualDownloadRequiredCount: result.manualDownloadRequiredCount,
+      supportedFailedCount: result.supportedFailedCount,
+      paths: result.paths,
+    }, null, 2));
+    if (result.supportedFailedCount !== 0) process.exitCode = 1;
+  });
+
+for (const command of ['status', 'inspect']) {
   program
     .command(command)
     .description(`${command} command is reserved for the staged Golden migration`)

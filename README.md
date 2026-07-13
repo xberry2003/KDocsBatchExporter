@@ -2,13 +2,14 @@
 
 面向金山文档（KDocs 365 企业空间）的模块化 Node.js 批量导出工程。
 
-项目正在逐步完成结构化迁移，目标是扫描企业空间目录，并根据文件类型选择直接下载或官方 DOCX 导出链，同时支持失败重试、文件校验、断点恢复和 manifest 记录。
+项目正在逐步完成结构化迁移，目标是扫描企业空间目录，并根据文件类型选择直接下载或官方 DOCX 导出链，同时支持失败重试、文件校验、断点恢复、manifest 记录和 Golden A/B 回归对比。
 
 ## 当前边界
 
 - 正式工程使用内部模块调用，不依赖已废弃的 RPA 或旧 POC CLI 串联。
 - 普通文件保留原格式直接下载。
 - AirPage / `.otl` 使用官方 DOCX 导出链。
+- DBT 特殊文档、表单和未知类型默认进入人工处理队列，不做伪自动化处理。
 - 最终任务按目录分批执行，每个目录拥有独立 scan state、manifest 和恢复边界。
 - 未完成 Golden A/B 回归前，不运行企业空间全量任务。
 
@@ -21,6 +22,38 @@ npm run check
 node scripts/cli.js --help
 ```
 
+## CLI 用法
+
+检查本地凭据摘要，输出不会打印 Cookie、CSRF 或 Token：
+
+```powershell
+node scripts/cli.js auth --credential-path C:\path\to\wps365.json
+```
+
+扫描企业空间目录并写出 JSONL 清单：
+
+```powershell
+node scripts/cli.js scan --url "https://365.kdocs.cn/ent/{orgid}/{groupid}" --output state/scans/sample.jsonl
+```
+
+执行混合导出任务：
+
+```powershell
+node scripts/cli.js export --url "https://365.kdocs.cn/ent/{orgid}/{groupid}" --output output/sample --task-dir state/tasks/sample
+```
+
+只生成扫描、路由计划和审计文件，不下载：
+
+```powershell
+node scripts/cli.js export --url "https://365.kdocs.cn/ent/{orgid}/{groupid}" --output output/sample --task-dir state/tasks/sample --scan-only
+```
+
+重试已有任务中可自动恢复的失败项：
+
+```powershell
+node scripts/cli.js retry-failed --task-dir state/tasks/sample
+```
+
 ## 目录结构
 
 ```text
@@ -28,12 +61,22 @@ src/auth/       认证状态
 src/kdocs/      KDocs API、数据模型和目录扫描
 src/airpage/    AirPage API 与 DOCX 导出
 src/download/   路由、下载、重试、路径和校验
+src/export/     统一扫描、路由、导出、审计和重试编排
 src/manifest/   JSONL manifest
 src/config/     配置
 scripts/        CLI 与维护脚本
 tests/unit/     无真实账号单元测试
 tests/integration/ 真实环境 A/B 回归
 ```
+
+## 当前能力
+
+- 目录扫描：解析企业空间 URL，遍历目录树，生成目录与文件清单。
+- 类型识别：区分普通 Office/PDF 文件、AirPage 在线文档、DBT 特殊文档、表单和未知类型。
+- 下载路由：普通文件走直接下载，`.otl` / AirPage 在线文档走官方 DOCX 导出。
+- 结果校验：校验 PDF、DOCX、PPT/PPTX、XLS/XLSX 等文件格式结构。
+- 任务恢复：写出 `manifest`、失败清单、人工处理清单和审计报告。
+- 回归脚本：支持直接下载样本、AirPage 单篇与 50 篇样本的 Golden 对比。
 
 ## 配置
 

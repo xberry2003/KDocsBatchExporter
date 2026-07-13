@@ -30,3 +30,12 @@ test('unknown without name is skipped', () => {
   assert.equal(resolveStrategy({}), DOWNLOAD_STRATEGY.SKIP);
 });
 
+test('form nodes are skipped instead of downloaded', () => {
+  assert.equal(detectFileType({ name: '闂嵎.form' }), ITEM_TYPE.FORM);
+  assert.equal(resolveStrategy({ name: '闂嵎.form' }), DOWNLOAD_STRATEGY.SKIP_MANUAL);
+});
+
+test('dbt nodes require manual download', () => {
+  assert.equal(detectFileType({ name: 'AI 批量生成.dbt' }), ITEM_TYPE.DBT_SPECIAL_DOCUMENT);
+  assert.equal(resolveStrategy({ name: 'AI 批量生成.dbt' }), DOWNLOAD_STRATEGY.SKIP_MANUAL);
+});

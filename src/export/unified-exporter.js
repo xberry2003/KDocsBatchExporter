@@ -377,6 +377,14 @@ function finalRecordsFromManifest(plan, manifest) {
     .sort((a, b) => plan.findIndex((entry) => entry.fileId === a.fileId) - plan.findIndex((entry) => entry.fileId === b.fileId));
 }
 
+function existingValidSuccess(manifest, entry, validateFn) {
+  const key = `${entry.groupId}:${entry.fileId}`;
+  const existing = manifest.get(key);
+  if (!existing || existing.status !== FILE_STATUS.SUCCESS) return null;
+  if (!manifest.shouldSkipSuccess(key, entry.expectedOutputPath, validateFn)) return null;
+  return existing.sourceRecord || existing;
+}
+
 function writeFinalTaskState({ task, plan, manifest, paths, routingAudit, stats, startedAt, retriedCount = 0 }) {
   const finalRecords = finalRecordsFromManifest(plan, manifest);
   const resultAudit = auditResults(plan, finalRecords);
@@ -679,33 +687,41 @@ async function runUnifiedExport(options = {}) {
     .filter((entry) => [DOWNLOAD_STRATEGY.SKIP, DOWNLOAD_STRATEGY.SKIP_MANUAL].includes(entry.strategy))
     .map((entry) => skipRecord(taskIdentity, entry));
 
-  const directRecords = await runPool(directPlan, Number(options.directConcurrency || config.directConcurrency), async (entry) => {
+  for (const record of skipRecords) {
+    await manifest.append(record);
+  }
+
+  await runPool(directPlan, Number(options.directConcurrency || config.directConcurrency), async (entry) => {
     const item = itemById.get(entry.fileId);
+    const validationType = validationTypeFor(item);
+    const existing = existingValidSuccess(manifest, entry, (filePath) => validateFile(filePath, validationType));
+    if (existing) return existing;
     const result = await directDownloader.download(item, entry.expectedOutputPath, {
       maxAttempts: Number(options.directAttempts || config.directAttempts),
-      validationType: validationTypeFor(item),
+      validationType,
     });
-    return directRecordFromResult(taskIdentity, entry, result);
+    const record = directRecordFromResult(taskIdentity, entry, result);
+    await manifest.append(record);
+    return record;
   });
 
-  const airpageRecords = await runPool(airpagePlan, Number(options.airpageConcurrency || config.airpageConcurrency), async (entry) => {
+  await runPool(airpagePlan, Number(options.airpageConcurrency || config.airpageConcurrency), async (entry) => {
     const item = itemById.get(entry.fileId);
+    const existing = existingValidSuccess(manifest, entry, (filePath) => validateFile(filePath, 'docx'));
+    if (existing) return existing;
     const result = await exportAirPageWithRetry(
       airpageExporter,
       item,
       entry,
       Number(options.airpageAttempts || config.airpageAttempts)
     );
-    return airpageRecordFromResult(taskIdentity, entry, result);
-  });
-
-  const finalRecords = [...directRecords, ...airpageRecords, ...skipRecords]
-    .sort((a, b) => plan.findIndex((entry) => entry.fileId === a.fileId) - plan.findIndex((entry) => entry.fileId === b.fileId));
-  for (const record of finalRecords) {
+    const record = airpageRecordFromResult(taskIdentity, entry, result);
     await manifest.append(record);
-  }
+    return record;
+  });
   await manifest.flush();
 
+  const finalRecords = finalRecordsFromManifest(plan, manifest);
   const resultAudit = auditResults(plan, finalRecords);
   const finishedAt = nowIso();
   const successRecords = finalRecords.filter((record) => record.status === FILE_STATUS.SUCCESS);
@@ -761,7 +777,7 @@ async function runUnifiedExport(options = {}) {
     routingAudit,
     resultAudit,
     countClosure: {
-      scannedFileCountEqualsStrategies: result.scannedFileCount === result.exportDocxCount + result.directDownloadCount + result.skipCount,
+      scannedFileCountEqualsStrategies: result.scannedFileCount === result.exportDocxCount + result.directDownloadCount + result.skipCount + result.skipManualCount,
       totalFileCountEqualsFinalStates: result.totalFileCount === result.successCount + result.failedCount + result.skippedCount + result.manualDownloadRequiredCount,
       totalFileCountEqualsDetailedStates: result.totalFileCount === result.successCount + result.autoFailedCount + result.manualDownloadRequiredCount + result.unsupportedSkipCount,
       successCountEqualsStrategySuccess: result.successCount === result.exportDocxSuccessCount + result.directDownloadSuccessCount,

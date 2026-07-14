@@ -86,5 +86,3 @@ tests/integration/ 真实环境 A/B 回归
 复制 `.env.example` 并通过环境变量提供本地配置。认证信息应放在仓库外部的凭据文件中，再通过 `KDOCS_CREDENTIAL_PATH` 指向该文件。
 
 真实 Cookie、CSRF、Token、浏览器 session、manifest 和导出文件不得提交到 Git。仓库仅包含程序代码、无敏感值的配置示例和单元测试。
-
-上线状态和维护说明见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。

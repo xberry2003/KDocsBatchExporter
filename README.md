@@ -84,4 +84,3 @@ tests/integration/ 真实环境 A/B 回归
 
 真实 Cookie、CSRF、Token、浏览器 session、manifest 和导出文件不得提交到 Git。仓库仅包含程序代码、无敏感值的配置示例和单元测试。
 
-当前完成情况见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
